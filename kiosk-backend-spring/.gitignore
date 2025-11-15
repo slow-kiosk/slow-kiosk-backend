@@ -1,0 +1,18 @@
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Build output
+target/
+build/
+
+# Log files
+*.log
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
