@@ -16,3 +16,8 @@ build/
 
 # Windows
 Thumbs.db
+
+# Gradle
+.gradle/
+build/
+out/
