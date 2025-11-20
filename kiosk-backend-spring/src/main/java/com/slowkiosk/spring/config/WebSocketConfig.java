@@ -28,7 +28,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // React가 Spring 서버의 WebSocket에 처음 연결할 때 사용할 엔드포인트
         // 예: const socket = new SockJS('http://localhost:8080/ws-kiosk');
         registry.addEndpoint("/ws-kiosk")
-                .setAllowedOriginPatterns("*"); // (중요) React 앱(localhost:3000)의 CORS 허용
-                //.withSockJS(); // SockJS는 WebSocket을 지원하지 않는 브라우저를 위한 폴백(fallback)
+                .setAllowedOriginPatterns("*") // (중요) React 앱(localhost:3000)의 CORS 허용
+                .withSockJS(); // SockJS는 WebSocket을 지원하지 않는 브라우저를 위한 폴백(fallback)
     }
 }
