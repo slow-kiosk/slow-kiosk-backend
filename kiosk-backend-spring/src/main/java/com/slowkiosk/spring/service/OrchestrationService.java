@@ -3,6 +3,8 @@ package com.slowkiosk.spring.service;
 import com.slowkiosk.spring.dto.KioskRequest;
 import com.slowkiosk.spring.dto.KioskResponse;
 import com.slowkiosk.spring.dto.OrderDto;
+import com.slowkiosk.spring.dto.ai.AnalyzeRequestDto;
+import com.slowkiosk.spring.dto.ai.AnalyzeResponseDto;
 import com.slowkiosk.spring.entity.Menu;
 import com.slowkiosk.spring.repository.MenuRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -11,161 +13,158 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrchestrationService {
 
-    // 1. AI 분석 서비스
     private final AiPythonService aiPythonService;
-
-    // 2. 임시 장바구니 (세션 스코프)
     private final CartService cartService;
-
-    // 3. 메뉴 조회용 (DB)
     private final MenuRepository menuRepository;
-
-    // 4. 최종 주문 생성용 (DB)
     private final OrderService orderService;
 
     /**
      * 키오스크의 다음 상태를 결정하고 응답을 반환합니다.
-     * (중요) 이 메서드는 여러 DB 작업을 하므로 트랜잭션으로 묶습니다.
+     * (중요) WebSocket SessionId를 받아 사용자별 장바구니를 구분합니다.
      */
     @Transactional
-    public KioskResponse processNextStep(KioskRequest request) {
-        log.info("Request received: {}", request);
-        log.info("Current Cart Items: {}", cartService.getCartItems());
+    public KioskResponse processNextStep(String sessionId, KioskRequest request) {
+        log.info("User Input [Session: {}]: {}", sessionId, request.getUserText());
 
-        // --- 1. (가짜) AI 분석 ---
-        // TODO: aiPythonService.analyzeText(...) 실제 구현
-        //String llmAction = "ADD_ITEM"; // (aiPythonService.analyzeText()가 반환했다고 가정)
-        //String llmItemName = request.getUserText(); // (간단하게 STT 텍스트를 메뉴 이름으로 가정)
-        // -------------------------
+        // 1. 현재 상황에 필요한 데이터 수집 (Menu, Cart)
+        List<Menu> allMenus = menuRepository.findAll();
+        Map<Long, Integer> currentCartMap = cartService.getCart(sessionId);
 
-        // (테스트용 가짜 AI 분석)
-        String userText = request.getUserText();
-        String llmAction;
-        String llmItemName = userText; // STT 텍스트를 메뉴 이름으로 가정
+        // 2. AI 요청 DTO 생성 (API 스펙에 맞춰 데이터 변환)
+        AnalyzeRequestDto aiRequest = AnalyzeRequestDto.builder()
+                .text(request.getUserText())
+                .scene(request.getCurrentState())
+                .cart(buildAiCartDto(currentCartMap)) // 현재 장바구니 상태 첨부
+                .menu(buildAiMenuDtoList(allMenus))   // 현재 메뉴판 정보 첨부
+                .build();
 
-        if (request.getCurrentState().equals("WELCOME")) {
-            llmAction = "START";
-        } else if (request.getCurrentState().equals("CONFIRM_ORDER") && userText.contains("결제")) {
-            llmAction = "CONFIRM";
-        } else if (userText.contains("아니") || userText.contains("됐어")) {
-            llmAction = "SKIP";
-        } else {
-            llmAction = "ADD_ITEM"; // 기본값은 아이템 추가
+        // 3. Python AI 서버 호출 (실제 분석 요청)
+        AnalyzeResponseDto aiResponse = aiPythonService.analyzeRequest(aiRequest);
+        log.info("AI Analysis Result: {}", aiResponse);
+
+        // 4. AI의 판단(Actions) 실행 (장바구니 추가/삭제 등)
+        if (aiResponse.getActions() != null) {
+            for (AnalyzeResponseDto.KioskAction action : aiResponse.getActions()) {
+                processAction(sessionId, action);
+            }
         }
 
-        // "상태 기계" 로직 실행
-        switch (request.getCurrentState()) {
-
-            case "WELCOME":
-                if ("START".equals(llmAction)) { // "주문할게요"
-                    return KioskResponse.builder()
-                            .newState("SELECT_BURGER")
-                            .spokenResponse("안녕하세요. 햄버거를 골라주세요...")
-                            .build();
-                }
-                break; // START 아니면 default로 감
-
-
-            case "SELECT_BURGER":
-            case "SELECT_DRINK":
-            case "SELECT_SIDE":
-                // 햄버거/음료/사이드 선택 로직 (공통 처리)
-                if ("ADD_ITEM".equals(llmAction)) {
-                    try {
-                        // 1. (DB) AI가 분석한 이름으로 메뉴 조회
-                        Menu menu = menuRepository.findByName(llmItemName)
-                                .orElseThrow(() -> new EntityNotFoundException("메뉴 없음: " + llmItemName));
-
-                        // 2. (Session) 장바구니에 담기
-                        cartService.addItem(menu, 1);
-                        log.info("장바구니 추가: {}, 현재 상태: {}", llmItemName, cartService.getCartItems());
-
-                        // 3. 다음 상태 결정 (예: 햄버거 -> 음료, 음료 -> 사이드)
-                        String nextState = determineNextState(request.getCurrentState());
-
-                        return KioskResponse.builder()
-                                .newState(nextState)
-                                .spokenResponse(llmItemName + "를 담았습니다. " + getSpokenPromptForState(nextState))
-                                .updatedCart(cartService.getCartItems()) // (UI 업데이트용)
-                                .build();
-
-                    } catch (EntityNotFoundException e) {
-                        log.warn(e.getMessage());
-                        return KioskResponse.builder()
-                                .newState(request.getCurrentState()) // 상태 유지
-                                .spokenResponse("죄송합니다. '" + llmItemName + "'라는 메뉴를 찾을 수 없습니다. 다시 말씀해주세요.")
-                                .updatedCart(cartService.getCartItems())
-                                .build();
-                    }
-                }
-                // TODO: "건너뛰기(SKIP)" 등 다른 LLM 액션 처리
-                break; // switch 탈출
-
-            case "CONFIRM_ORDER": // 사용자가 "결제할게요"라고 말한 상태
-                // (가정) llmAction이 "CONFIRM"이라고 가정
-
-                // 1. (Session) 세션 장바구니에서 주문 DTO 생성
-                OrderDto.CreateRequest orderRequest = cartService.createOrderRequestDto();
-
-                if (orderRequest.getItems().isEmpty()) {
-                    return KioskResponse.builder()
-                            .newState("WELCOME") // 장바구니가 비었으면 처음으로
-                            .spokenResponse("장바구니가 비어있습니다. 주문을 처음부터 시작해주세요.")
-                            .build();
-                }
-
-                // 2. (DB) OrderService를 호출하여 DB에 최종 주문 생성
-                OrderDto.Response finalOrder = orderService.createOrder(orderRequest);
-
-                // 3. (Session) 세션 장바구니 비우기
-                cartService.clearCart();
-
-                return KioskResponse.builder()
-                        .newState("ORDER_COMPLETE")
-                        .spokenResponse("주문이 완료되었습니다. 총 금액은 " + finalOrder.getTotalPrice() + "원 입니다.")
-                        .updatedCart(null)
-                        .build();
-
-            default:
-                log.warn("알 수 없는 상태입니다: {}", request.getCurrentState());
-                return KioskResponse.builder()
-                        .newState("WELCOME")
-                        .spokenResponse("죄송합니다. 처음부터 다시 시도해주세요.")
-                        .build();
+        // 5. 주문 종료(결제) 판단
+        // AI가 'should_finish'를 true로 보냈거나, 다음 화면이 'ORDER_COMPLETE'인 경우
+        if (aiResponse.isShouldFinish() || "ORDER_COMPLETE".equals(aiResponse.getNextScene())) {
+            return handleOrderCompletion(sessionId, aiResponse);
         }
 
-        // (ADD_ITEM 외의 액션 처리 시)
+        // 6. 일반 응답 반환 (AI가 정해준 멘트와 다음 화면 사용)
         return KioskResponse.builder()
-                .newState(request.getCurrentState()) // 기본값: 상태 유지
-                .spokenResponse("죄송합니다. 잘 이해하지 못했어요.")
-                .updatedCart(cartService.getCartItems())
+                .newState(aiResponse.getNextScene()) // AI가 판단한 다음 화면
+                .spokenResponse(aiResponse.getAssistantText()) // AI가 생성한 답변
+                .updatedCart(cartService.getCart(sessionId)) // 갱신된 장바구니
                 .build();
     }
 
-    // --- Helper Methods ---
+    // --- 내부 로직 ---
 
-    private String determineNextState(String currentState) {
-        if ("SELECT_BURGER".equals(currentState)) {
-            return "SELECT_DRINK";
+    /**
+     * AI의 Action(추가/삭제)을 실제 CartService에 반영
+     */
+    private void processAction(String sessionId, AnalyzeResponseDto.KioskAction action) {
+        if ("NONE".equals(action.getType()) || action.getMenuId() == null) {
+            return;
         }
-        if ("SELECT_DRINK".equals(currentState)) {
-            return "SELECT_SIDE";
+
+        try {
+            // Python은 String ID를 쓰지만, DB는 Long ID를 쓰므로 변환
+            Long menuId = Long.parseLong(action.getMenuId());
+            Menu menu = menuRepository.findById(menuId)
+                    .orElseThrow(() -> new EntityNotFoundException("Menu not found: " + menuId));
+
+            int qty = (action.getQty() != null) ? action.getQty() : 1;
+
+            switch (action.getType()) {
+                case "ADD_ITEM":
+                    cartService.addItem(sessionId, menu, qty);
+                    log.info("Cart Update [Add]: {} {}ea", menu.getName(), qty);
+                    break;
+                case "REMOVE_ITEM":
+                    // 수량이 음수면 빼기 로직으로 동작하게 하거나, 별도 remove 메서드 구현
+                    cartService.addItem(sessionId, menu, -qty);
+                    log.info("Cart Update [Remove]: {} {}ea", menu.getName(), qty);
+                    break;
+                default:
+                    log.warn("Unknown Action Type: {}", action.getType());
+            }
+
+        } catch (NumberFormatException e) {
+            log.error("Invalid Menu ID format from AI: {}", action.getMenuId());
+        } catch (EntityNotFoundException e) {
+            log.error("Menu ID from AI not found in DB: {}", action.getMenuId());
         }
-        return "CONFIRM_ORDER"; // 사이드 메뉴 다음은 주문 확인
     }
 
-    private String getSpokenPromptForState(String newState) {
-        if ("SELECT_DRINK".equals(newState)) {
-            return "음료를 선택해주세요.";
+    /**
+     * 주문 완료 처리 (DB 저장 및 장바구니 초기화)
+     */
+    private KioskResponse handleOrderCompletion(String sessionId, AnalyzeResponseDto aiResponse) {
+        // 1. 주문 DTO 생성
+        OrderDto.CreateRequest orderRequest = cartService.createOrderRequestDto(sessionId);
+
+        if (orderRequest.getItems().isEmpty()) {
+            return KioskResponse.builder()
+                    .newState("WELCOME")
+                    .spokenResponse("장바구니가 비어있어 주문을 종료합니다.")
+                    .build();
         }
-        if ("SELECT_SIDE".equals(newState)) {
-            return "사이드 메뉴를 선택하시겠어요?";
-        }
-        return "추가로 주문하실 것이 있나요? 없으시면 '결제'라고 말씀해주세요.";
+
+        // 2. DB에 최종 주문 저장
+        OrderDto.Response finalOrder = orderService.createOrder(orderRequest);
+
+        // 3. 장바구니 비우기
+        cartService.clearCart(sessionId);
+
+        // 4. 최종 멘트에 금액 정보 추가
+        String finalMessage = aiResponse.getAssistantText() +
+                " 총 금액은 " + finalOrder.getTotalPrice() + "원 입니다.";
+
+        return KioskResponse.builder()
+                .newState("ORDER_COMPLETE")
+                .spokenResponse(finalMessage)
+                .updatedCart(null)
+                .build();
+    }
+
+    // --- DTO 변환 헬퍼 ---
+
+    // 장바구니 Map -> AI 요청용 DTO 변환
+    private AnalyzeRequestDto.AiCartDto buildAiCartDto(Map<Long, Integer> cartMap) {
+        List<AnalyzeRequestDto.AiCartItemDto> items = cartMap.entrySet().stream()
+                .map(entry -> AnalyzeRequestDto.AiCartItemDto.builder()
+                        .menuId(String.valueOf(entry.getKey()))
+                        .qty(entry.getValue())
+                        .build())
+                .collect(Collectors.toList());
+
+        return AnalyzeRequestDto.AiCartDto.builder().items(items).build();
+    }
+
+    // DB 메뉴 리스트 -> AI 요청용 DTO 변환
+    private List<AnalyzeRequestDto.AiMenuDto> buildAiMenuDtoList(List<Menu> menus) {
+        return menus.stream()
+                .map(m -> AnalyzeRequestDto.AiMenuDto.builder()
+                        .menuId(String.valueOf(m.getId()))
+                        .name(m.getName())
+                        .category(m.getCategory())
+                        .price((int) m.getPrice())
+                        .build())
+                .collect(Collectors.toList());
     }
 }
