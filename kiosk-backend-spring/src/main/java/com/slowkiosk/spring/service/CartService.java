@@ -29,11 +29,18 @@ public class CartService {
     /**
      * 장바구니에 메뉴 추가
      */
+    // CartService.java 수정 제안
     public void addItem(String sessionId, Menu menu, int quantity) {
         Map<Long, Integer> userCart = getCart(sessionId);
-        userCart.put(menu.getId(), userCart.getOrDefault(menu.getId(), 0) + quantity);
-    }
+        int currentQty = userCart.getOrDefault(menu.getId(), 0);
+        int newQty = currentQty + quantity;
 
+        if (newQty <= 0) {
+            userCart.remove(menu.getId()); // 0개 이하면 장바구니에서 제거
+        } else {
+            userCart.put(menu.getId(), newQty);
+        }
+    }
     /**
      * 장바구니 비우기
      */
