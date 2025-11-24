@@ -44,7 +44,7 @@ public class OrchestrationService {
                 .text(request.getUserText())
                 .scene(request.getCurrentState())
                 .cart(buildAiCartDto(currentCartMap)) // 현재 장바구니 상태 첨부
-                .menu(buildAiMenuDtoList(allMenus))   // 현재 메뉴판 정보 첨부
+                .menu(buildAiMenuDtoList(allMenus))   // [핵심] 매핑된 메뉴 정보 첨부
                 .build();
 
         // 3. Python AI 서버 호출 (실제 분석 요청)
@@ -156,15 +156,30 @@ public class OrchestrationService {
         return AnalyzeRequestDto.AiCartDto.builder().items(items).build();
     }
 
-    // DB 메뉴 리스트 -> AI 요청용 DTO 변환
+    // [핵심 수정] DB 메뉴 리스트 -> AI 요청용 DTO 변환 (데이터 매핑 로직)
     private List<AnalyzeRequestDto.AiMenuDto> buildAiMenuDtoList(List<Menu> menus) {
         return menus.stream()
-                .map(m -> AnalyzeRequestDto.AiMenuDto.builder()
-                        .menuId(String.valueOf(m.getId()))
-                        .name(m.getName())
-                        .category(m.getCategory())
-                        .price((int) m.getPrice())
-                        .build())
+                .map(m -> {
+                    // 전략: 영양 정보와 설명을 파이썬 서버의 'ingredients_ko' 필드에 텍스트로 합쳐서 보냄
+                    String combinedInfo = String.format("%s / %s",
+                            m.getDescription() != null ? m.getDescription() : "",
+                            m.getNutrition() != null ? m.getNutrition() : "");
+
+                    // 태그 문자열("a,b")을 리스트(["a","b"])로 변환
+                    List<String> tagList = (m.getTags() != null && !m.getTags().isEmpty())
+                            ? List.of(m.getTags().split(","))
+                            : List.of();
+
+                    return AnalyzeRequestDto.AiMenuDto.builder()
+                            .menuId(String.valueOf(m.getId()))
+                            .name(m.getName())
+                            .category(m.getCategory())
+                            .price((int) m.getPrice())
+                            .tags(tagList)
+                            // [핵심] 파이썬 서버의 ingredients_ko 필드에 모든 정보를 몰아 넣음
+                            .ingredients_ko(combinedInfo)
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 }

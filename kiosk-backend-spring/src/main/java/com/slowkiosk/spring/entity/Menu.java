@@ -11,7 +11,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
+@AllArgsConstructor // DataInitializer에서 모든 필드를 포함한 생성자를 쓰기 위해 필요
 public class Menu {
 
     @Id
@@ -23,26 +23,39 @@ public class Menu {
 
     private double price;
 
-    private String description;
+    private String description; // 메뉴 설명
 
     private String imageUrl;
 
-    // (선택) 햄버거, 음료, 사이드 등을 구분하는 카테고리
-    private String category;
+    private String category; // BURGER, SIDE, DRINK 등
 
+    // [신규 추가] 영양 성분 (예: "500kcal, 단백질 20g")
+    // AI가 "칼로리가 어떻게 돼?" 같은 질문에 답하기 위해 필요
+    private String nutrition;
+
+    // [신규 추가] 태그 (예: "베스트,매운맛")
+    // AI가 "매운거 추천해줘" 같은 질문에 답하기 위해 필요
+    private String tags;
+
+    // DTO를 기반으로 엔티티를 생성하는 생성자
     public Menu(MenuDto.CreateRequest request) {
         this.name = request.getName();
         this.price = request.getPrice();
         this.description = request.getDescription();
         this.imageUrl = request.getImageUrl();
         this.category = request.getCategory();
+        this.nutrition = request.getNutrition(); // 추가됨
+        this.tags = request.getTags();           // 추가됨
     }
 
+    // 정보 업데이트 메서드
     public void update(MenuDto.UpdateRequest request) {
         this.name = request.getName();
         this.price = request.getPrice();
         this.description = request.getDescription();
         this.imageUrl = request.getImageUrl();
         this.category = request.getCategory();
+        this.nutrition = request.getNutrition(); // 추가됨
+        this.tags = request.getTags();           // 추가됨
     }
 }
