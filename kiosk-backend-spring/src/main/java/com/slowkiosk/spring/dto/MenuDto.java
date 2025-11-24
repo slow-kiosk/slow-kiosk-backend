@@ -7,16 +7,16 @@ import lombok.Setter;
 
 public class MenuDto {
 
-    // === 요청(Request) DTO ===
-
     @Getter
-    @Setter // Controller에서 JSON을 객체로 변환(Deserialize)할 때 필요
+    @Setter
     public static class CreateRequest {
         private String name;
         private double price;
         private String description;
         private String imageUrl;
         private String category;
+        private String nutrition; // 추가
+        private String tags;      // 추가
     }
 
     @Getter
@@ -27,12 +27,12 @@ public class MenuDto {
         private String description;
         private String imageUrl;
         private String category;
+        private String nutrition; // 추가
+        private String tags;      // 추가
     }
 
-    // === 응답(Response) DTO ===
-
     @Getter
-    @Builder // Service에서 Entity -> DTO 변환 시 편리
+    @Builder
     public static class Response {
         private Long id;
         private String name;
@@ -40,8 +40,9 @@ public class MenuDto {
         private String description;
         private String imageUrl;
         private String category;
+        private String nutrition; // 추가
+        private String tags;      // 추가
 
-        // Service 레이어에서 Entity를 DTO로 변환하는 정적 메서드
         public static Response fromEntity(Menu menu) {
             return Response.builder()
                     .id(menu.getId())
@@ -50,6 +51,8 @@ public class MenuDto {
                     .description(menu.getDescription())
                     .imageUrl(menu.getImageUrl())
                     .category(menu.getCategory())
+                    .nutrition(menu.getNutrition()) // 매핑 추가
+                    .tags(menu.getTags())           // 매핑 추가
                     .build();
         }
     }
