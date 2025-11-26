@@ -156,15 +156,9 @@ public class OrchestrationService {
         return AnalyzeRequestDto.AiCartDto.builder().items(items).build();
     }
 
-    // [핵심 수정] DB 메뉴 리스트 -> AI 요청용 DTO 변환 (데이터 매핑 로직)
     private List<AnalyzeRequestDto.AiMenuDto> buildAiMenuDtoList(List<Menu> menus) {
         return menus.stream()
                 .map(m -> {
-                    // 전략: 영양 정보와 설명을 파이썬 서버의 'ingredients_ko' 필드에 텍스트로 합쳐서 보냄
-                    String combinedInfo = String.format("%s / %s",
-                            m.getDescription() != null ? m.getDescription() : "",
-                            m.getNutrition() != null ? m.getNutrition() : "");
-
                     // 태그 문자열("a,b")을 리스트(["a","b"])로 변환
                     List<String> tagList = (m.getTags() != null && !m.getTags().isEmpty())
                             ? List.of(m.getTags().split(","))
@@ -176,8 +170,10 @@ public class OrchestrationService {
                             .category(m.getCategory())
                             .price((int) m.getPrice())
                             .tags(tagList)
-                            // [핵심] 파이썬 서버의 ingredients_ko 필드에 모든 정보를 몰아 넣음
-                            .ingredients_ko(combinedInfo)
+                            // [수정] 더 이상 합치지 않고 각각의 필드에 매핑
+                            .ingredients_ko(m.getDescription()) // (참고: 파이썬이 '재료'로 인식하도록 설명이나 재료를 넣음)
+                            .description(m.getDescription())    // 상세 설명
+                            .nutrition(m.getNutrition())        // 영양 정보 (별도 전송)
                             .build();
                 })
                 .collect(Collectors.toList());

@@ -7,23 +7,18 @@ import lombok.ToString;
 
 import java.util.List;
 
-/**
- * Python AI 서버로 보내는 요청 객체
- * (Python 서버의 AnalyzeRequest 모델과 1:1 매핑)
- */
 @Getter
 @Setter
 @Builder
 @ToString
 public class AnalyzeRequestDto {
 
-    private String text;      // 사용자 발화 (STT 완료된 텍스트)
-    private String scene;     // 현재 화면 상태 (e.g., "SELECT_BURGER")
-    private AiCartDto cart;   // 현재 장바구니 상태
-    private List<AiMenuDto> menu; // 현재 주문 가능한 메뉴 목록
+    private String text;
+    private String scene;
+    private AiCartDto cart;
+    private List<AiMenuDto> menu;
 
-    // --- 내부 클래스 (Nested DTOs) ---
-
+    // ... (AiCartDto, AiCartItemDto는 기존과 동일) ...
     @Getter
     @Setter
     @Builder
@@ -37,7 +32,7 @@ public class AnalyzeRequestDto {
     @Builder
     @ToString
     public static class AiCartItemDto {
-        private String menuId; // Python은 String ID 사용
+        private String menuId;
         private int qty;
     }
 
@@ -51,9 +46,14 @@ public class AnalyzeRequestDto {
         private String category;
         private int price;
 
-        // [중요] Python 서버의 models.py와 필드명을 정확히 일치시켜야 합니다.
-        private List<String> tags;          // 예: ["베스트", "매운맛"]
-        private String ingredients_ko;      // 재료 및 설명 (Spring에서 합쳐서 보냄)
-        private String customizable_ko;     // 커스터마이징 정보 (사용 안 하면 null)
+        // [수정] 파이썬 서버와 명확하게 데이터를 나누기 위해 필드 분리
+        private List<String> tags;
+        private String ingredients_ko;      // 순수 재료 정보만 담음
+
+        // [신규 추가]
+        private String description;         // 메뉴 설명
+        private String nutrition;           // 영양 성분
+
+        private String customizable_ko;
     }
 }
