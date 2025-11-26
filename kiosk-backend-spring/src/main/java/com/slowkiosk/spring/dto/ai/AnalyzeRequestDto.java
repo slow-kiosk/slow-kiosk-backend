@@ -19,7 +19,6 @@ public class AnalyzeRequestDto {
     private AiCartDto cart;
     private List<AiMenuDto> menu;
 
-    // ... (AiCartDto, AiCartItemDto는 기존과 동일) ...
     @Getter
     @Setter
     @Builder
@@ -48,16 +47,25 @@ public class AnalyzeRequestDto {
         private int price;
         private List<String> tags;
 
-        // private String nutrition; // [삭제] 혹은 아래와 같이 변경
+        // [기존 유지 및 매핑 명시] 재료 정보
+        // Python의 ingredients_ko 필드와 매핑
+        @JsonProperty("ingredients_ko")
+        private String ingredientsKo;
 
-        // [수정] Python의 MenuItem 모델 필드명과 정확히 일치시켜야 함 ("nutrition_summary_ko")
-        @JsonProperty("nutrition_summary_ko") // Jackson 라이브러리 어노테이션 추가 필요
-        private String nutrition;
+        // [수정] 영양 정보 요약 (nutrition -> nutritionSummaryKo)
+        // Python의 nutrition_summary_ko 필드와 매핑
+        @JsonProperty("nutrition_summary_ko")
+        private String nutritionSummaryKo;
 
-        // 또는 변수명 자체를 변경
-        // private String nutrition_summary_ko;
+        // [신규 추가] 알레르기 주의 문구
+        // Python의 allergy_warning_ko 필드와 매핑
+        @JsonProperty("allergy_warning_ko")
+        private String allergyWarningKo;
 
         private String description;
-        private String customizable_ko;
+
+        // [수정] 커스터마이즈 옵션 (변수명을 Java 관례에 맞게 변경하고 매핑)
+        @JsonProperty("customizable_ko")
+        private String customizableKo;
     }
 }

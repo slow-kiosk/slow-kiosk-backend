@@ -7,6 +7,9 @@ import com.slowkiosk.spring.dto.ai.AnalyzeRequestDto;
 import com.slowkiosk.spring.dto.ai.AnalyzeResponseDto;
 import com.slowkiosk.spring.entity.Menu;
 import com.slowkiosk.spring.repository.MenuRepository;
+import com.slowkiosk.spring.service.AiPythonService;
+import com.slowkiosk.spring.service.CartService;
+import com.slowkiosk.spring.service.OrderService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -159,10 +162,21 @@ public class OrchestrationService {
     private List<AnalyzeRequestDto.AiMenuDto> buildAiMenuDtoList(List<Menu> menus) {
         return menus.stream()
                 .map(m -> {
-                    // 태그 문자열("a,b")을 리스트(["a","b"])로 변환
                     List<String> tagList = (m.getTags() != null && !m.getTags().isEmpty())
                             ? List.of(m.getTags().split(","))
                             : List.of();
+
+                    // 1. 영양 정보와 알레르기 정보 분리 로직 (DataInitializer 포맷 기준)
+                    // 예: "720kcal... / 이 메뉴는..." 에서 "/" 를 기준으로 나눔
+                    String fullInfo = m.getNutrition();
+                    String nutritionSummary = fullInfo;
+                    String allergyWarning = "";
+
+                    if (fullInfo != null && fullInfo.contains("/")) {
+                        String[] parts = fullInfo.split("/", 2); // 최대 2개로 분할
+                        nutritionSummary = parts[0].trim();
+                        allergyWarning = parts.length > 1 ? parts[1].trim() : "";
+                    }
 
                     return AnalyzeRequestDto.AiMenuDto.builder()
                             .menuId(String.valueOf(m.getId()))
@@ -170,10 +184,15 @@ public class OrchestrationService {
                             .category(m.getCategory())
                             .price((int) m.getPrice())
                             .tags(tagList)
-                            // [수정] 더 이상 합치지 않고 각각의 필드에 매핑
-                            .ingredients_ko(m.getDescription()) // (참고: 파이썬이 '재료'로 인식하도록 설명이나 재료를 넣음)
-                            .description(m.getDescription())    // 상세 설명
-                            .nutrition(m.getNutrition())        // 영양 정보 (별도 전송)
+
+                            // [수정] DTO의 자바 변수명인 ingredientsKo 사용 (ingredients_ko 아님)
+                            .ingredientsKo(m.getDescription())
+
+                            .description(m.getDescription())
+
+                            // [수정] DTO 변수명에 맞춰 메서드 호출
+                            .nutritionSummaryKo(nutritionSummary)
+                            .allergyWarningKo(allergyWarning)
                             .build();
                 })
                 .collect(Collectors.toList());
