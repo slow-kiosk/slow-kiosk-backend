@@ -1,5 +1,6 @@
 package com.slowkiosk.spring.dto.ai;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -45,15 +46,18 @@ public class AnalyzeRequestDto {
         private String name;
         private String category;
         private int price;
-
-        // [수정] 파이썬 서버와 명확하게 데이터를 나누기 위해 필드 분리
         private List<String> tags;
-        private String ingredients_ko;      // 순수 재료 정보만 담음
 
-        // [신규 추가]
-        private String description;         // 메뉴 설명
-        private String nutrition;           // 영양 성분
+        // private String nutrition; // [삭제] 혹은 아래와 같이 변경
 
+        // [수정] Python의 MenuItem 모델 필드명과 정확히 일치시켜야 함 ("nutrition_summary_ko")
+        @JsonProperty("nutrition_summary_ko") // Jackson 라이브러리 어노테이션 추가 필요
+        private String nutrition;
+
+        // 또는 변수명 자체를 변경
+        // private String nutrition_summary_ko;
+
+        private String description;
         private String customizable_ko;
     }
 }
