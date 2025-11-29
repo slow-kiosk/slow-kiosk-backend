@@ -125,6 +125,7 @@ public class OrchestrationService {
         // 1. 주문 DTO 생성
         OrderDto.CreateRequest orderRequest = cartService.createOrderRequestDto(sessionId);
 
+        // 빈 장바구니면 홈으로
         if (orderRequest.getItems().isEmpty()) {
             return KioskResponse.builder()
                     .newState("WELCOME")
@@ -135,17 +136,21 @@ public class OrchestrationService {
         // 2. DB에 최종 주문 저장
         OrderDto.Response finalOrder = orderService.createOrder(orderRequest);
 
-        // 3. 장바구니 비우기
+        // [핵심] 3. 장바구니를 비우기 전에 '현재 담긴 메뉴들'을 백업해둡니다.
+        // 이 데이터가 있어야 프론트엔드 결제 화면에 치킨너겟, 콜라 등이 뜹니다.
+        Map<Long, Integer> lastCartState = cartService.getCart(sessionId);
+
+        // 4. 서버 장바구니 비우기
         cartService.clearCart(sessionId);
 
-        // 4. 최종 멘트에 금액 정보 추가
+        // 5. 최종 응답에 '백업한 장바구니 정보(lastCartState)'를 담아서 보냅니다.
         String finalMessage = aiResponse.getAssistantText() +
                 " 총 금액은 " + finalOrder.getTotalPrice() + "원 입니다.";
 
         return KioskResponse.builder()
                 .newState("ORDER_COMPLETE")
                 .spokenResponse(finalMessage)
-                .updatedCart(null)
+                .updatedCart(lastCartState) // null 대신 마지막 상태 전달
                 .build();
     }
 
