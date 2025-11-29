@@ -4,19 +4,18 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
+import java.util.List;
+import java.util.Map;
+
 @Getter
 @Setter
-@ToString // 로그 확인용
+@ToString
 public class KioskRequest {
 
-    /**
-     * React UI가 알고 있는 현재 주문 단계
-     * 예: "WELCOME", "SELECT_BURGER", "SELECT_DRINK", "CONFIRM_ORDER"
-     */
     private String currentState;
-
-    /**
-     * [REST API]를 통해 STT가 완료된 텍스트
-     */
     private String userText;
+    private String clientKey; // 사용자 구분용 키
+
+    // [추가] 대화 내역 (예: [{"role": "user", "content": "..."}])
+    private List<Map<String, String>> history;
 }

@@ -7,9 +7,6 @@ import com.slowkiosk.spring.dto.ai.AnalyzeRequestDto;
 import com.slowkiosk.spring.dto.ai.AnalyzeResponseDto;
 import com.slowkiosk.spring.entity.Menu;
 import com.slowkiosk.spring.repository.MenuRepository;
-import com.slowkiosk.spring.service.AiPythonService;
-import com.slowkiosk.spring.service.CartService;
-import com.slowkiosk.spring.service.OrderService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +29,7 @@ public class OrchestrationService {
 
     /**
      * 키오스크의 다음 상태를 결정하고 응답을 반환합니다.
-     * (중요) WebSocket SessionId를 받아 사용자별 장바구니를 구분합니다.
+     * WebSocket SessionId를 사용하여 사용자별 장바구니를 구분합니다.
      */
     @Transactional
     public KioskResponse processNextStep(String sessionId, KioskRequest request) {
@@ -48,6 +45,7 @@ public class OrchestrationService {
                 .scene(request.getCurrentState())
                 .cart(buildAiCartDto(currentCartMap)) // 현재 장바구니 상태 첨부
                 .menu(buildAiMenuDtoList(allMenus))   // [핵심] 매핑된 메뉴 정보 첨부
+                .history(request.getHistory())        // [추가] 대화 내역 전달
                 .build();
 
         // 3. Python AI 서버 호출 (실제 분석 요청)
@@ -99,7 +97,7 @@ public class OrchestrationService {
                     log.info("Cart Update [Add]: {} {}ea", menu.getName(), qty);
                     break;
                 case "REMOVE_ITEM":
-                    // 수량이 음수면 빼기 로직으로 동작하게 하거나, 별도 remove 메서드 구현
+                    // 수량이 음수면 빼기 로직으로 동작
                     cartService.addItem(sessionId, menu, -qty);
                     log.info("Cart Update [Remove]: {} {}ea", menu.getName(), qty);
                     break;
@@ -159,6 +157,7 @@ public class OrchestrationService {
         return AnalyzeRequestDto.AiCartDto.builder().items(items).build();
     }
 
+    // Menu 엔티티 -> AI 요청용 메뉴 정보 변환
     private List<AnalyzeRequestDto.AiMenuDto> buildAiMenuDtoList(List<Menu> menus) {
         return menus.stream()
                 .map(m -> {
@@ -167,7 +166,7 @@ public class OrchestrationService {
                             : List.of();
 
                     // 1. 영양 정보와 알레르기 정보 분리 로직 (DataInitializer 포맷 기준)
-                    // 예: "720kcal... / 이 메뉴는..." 에서 "/" 를 기준으로 나눔
+                    // 예: "720kcal... / 알레르기: 밀,대두" 에서 "/" 를 기준으로 나눔
                     String fullInfo = m.getNutrition();
                     String nutritionSummary = fullInfo;
                     String allergyWarning = "";
@@ -185,14 +184,14 @@ public class OrchestrationService {
                             .price((int) m.getPrice())
                             .tags(tagList)
 
-                            // [수정] DTO의 자바 변수명인 ingredientsKo 사용 (ingredients_ko 아님)
+                            // [수정 완료] Java DTO의 필드명(CamelCase) 사용
                             .ingredientsKo(m.getDescription())
-
                             .description(m.getDescription())
 
-                            // [수정] DTO 변수명에 맞춰 메서드 호출
+                            // [수정 완료] 분리된 영양 정보 매핑
                             .nutritionSummaryKo(nutritionSummary)
                             .allergyWarningKo(allergyWarning)
+
                             .build();
                 })
                 .collect(Collectors.toList());
