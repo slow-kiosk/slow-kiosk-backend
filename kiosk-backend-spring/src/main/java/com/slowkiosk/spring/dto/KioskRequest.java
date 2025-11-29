@@ -14,7 +14,6 @@ public class KioskRequest {
 
     private String currentState;
     private String userText;
-    private String clientKey; // 사용자 구분용 키
 
     // [추가] 대화 내역 (예: [{"role": "user", "content": "..."}])
     private List<Map<String, String>> history;

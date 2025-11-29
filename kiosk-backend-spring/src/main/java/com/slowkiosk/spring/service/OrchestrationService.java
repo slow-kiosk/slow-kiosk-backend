@@ -35,20 +35,26 @@ public class OrchestrationService {
     public KioskResponse processNextStep(String sessionId, KioskRequest request) {
         log.info("User Input [Session: {}]: {}", sessionId, request.getUserText());
 
-        // 1. 현재 상황에 필요한 데이터 수집 (Menu, Cart)
+        // 1. 데이터 수집
         List<Menu> allMenus = menuRepository.findAll();
         Map<Long, Integer> currentCartMap = cartService.getCart(sessionId);
 
-        // 2. AI 요청 DTO 생성 (API 스펙에 맞춰 데이터 변환)
+        // [수정] 대화 내역이 null이면 빈 리스트로 변환 (안전장치)
+        List<Map<String, String>> historyData = request.getHistory();
+        if (historyData == null) {
+            historyData = List.of(); // null 대신 [] (빈 리스트) 사용
+        }
+
+        // 2. AI 요청 DTO 생성
         AnalyzeRequestDto aiRequest = AnalyzeRequestDto.builder()
                 .text(request.getUserText())
                 .scene(request.getCurrentState())
-                .cart(buildAiCartDto(currentCartMap)) // 현재 장바구니 상태 첨부
-                .menu(buildAiMenuDtoList(allMenus))   // [핵심] 매핑된 메뉴 정보 첨부
-                .history(request.getHistory())        // [추가] 대화 내역 전달
+                .cart(buildAiCartDto(currentCartMap))
+                .menu(buildAiMenuDtoList(allMenus))
+                .history(historyData) // [수정] 안전하게 변환된 history 전달
                 .build();
 
-        // 3. Python AI 서버 호출 (실제 분석 요청)
+        // 3. Python AI 서버 호출
         AnalyzeResponseDto aiResponse = aiPythonService.analyzeRequest(aiRequest);
         log.info("AI Analysis Result: {}", aiResponse);
 
