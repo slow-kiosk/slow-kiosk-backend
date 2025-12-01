@@ -14,7 +14,6 @@ import java.util.List;
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
-@Profile("!prod") // "prod" (운영) 프로필이 아닐 때만 실행
 public class DataInitializer {
 
     private final MenuRepository menuRepository;
